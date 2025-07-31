@@ -1,0 +1,10 @@
+transformers
+torch
+bertopic
+sentence-transformers
+scikit-learn
+numpy
+pandas
+requests
+top2vec[sentence_encoders]
+
