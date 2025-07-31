@@ -7,4 +7,7 @@ numpy
 pandas
 requests
 top2vec[sentence_encoders]
+datasets
+evaluate
+transformers[torch]
 

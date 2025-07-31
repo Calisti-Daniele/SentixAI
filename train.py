@@ -7,6 +7,9 @@ import evaluate
 import torch
 from torch import nn
 
+print("🔥 CUDA disponibile:", torch.cuda.is_available())
+print("🧠 Device in uso:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
+
 # === CONFIG ===
 MODEL_NAME = "MilaNLProc/feel-it-italian-sentiment"
 MAX_LENGTH = 128
@@ -60,8 +63,10 @@ print("🧠 Caricamento modello pre-addestrato...")
 model = AutoModelForSequenceClassification.from_pretrained(
     MODEL_NAME,
     num_labels=len(CATEGORIES),
-    problem_type="multi_label_classification"
+    problem_type="multi_label_classification",
+    ignore_mismatched_sizes=True
 )
+
 print("✅ Modello pronto\n")
 
 # === 7. Metriche ===
@@ -69,15 +74,19 @@ print("📊 Preparazione metriche di valutazione...")
 accuracy = evaluate.load("accuracy")
 f1 = evaluate.load("f1")
 
+def multilabel_accuracy(preds, labels):
+    return (preds == labels).all(axis=1).mean()  # esattezza completa su tutte le classi
+
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     probs = torch.sigmoid(torch.tensor(logits)).numpy()
     preds = (probs >= 0.5).astype(int)
     return {
-        "accuracy": accuracy.compute(predictions=preds, references=labels)["accuracy"],
+        "custom_accuracy": multilabel_accuracy(preds, labels),
         "f1_micro": f1.compute(predictions=preds, references=labels, average="micro")["f1"],
         "f1_macro": f1.compute(predictions=preds, references=labels, average="macro")["f1"],
     }
+
 
 print("✅ Metriche pronte\n")
 
@@ -88,15 +97,20 @@ training_args = TrainingArguments(
     per_device_train_batch_size=BATCH_SIZE,
     per_device_eval_batch_size=BATCH_SIZE,
     num_train_epochs=NUM_EPOCHS,
-    evaluation_strategy="epoch",
-    save_strategy="epoch",
+    eval_strategy="steps",     # <-- cambia da "epoch"
+    save_strategy="steps",           # <-- salva ogni N step
+    save_steps=1000,                 # <-- salva ogni 1000 step (modifica a piacere)
+    eval_steps=1000,                 # <-- valuta ogni 1000 step
+    logging_steps=50,
     logging_dir="./logs",
     load_best_model_at_end=True,
     metric_for_best_model="f1_micro",
     greater_is_better=True,
-    logging_steps=50,
-    report_to="none"
+    save_total_limit=2,              # <-- massimo 2 checkpoint da salvare
+    report_to="none",
+    fp16=True
 )
+
 print("✅ Parametri di training configurati\n")
 
 # === 9. Trainer ===
@@ -125,7 +139,7 @@ print("✅ Trainer pronto\n")
 
 # === 11. Addestramento ===
 print("🚦 Inizio addestramento...\n")
-trainer.train()
+trainer.train(resume_from_checkpoint=True)
 print("\n✅ Addestramento completato!\n")
 
 # === 12. Salvataggio modello ===
