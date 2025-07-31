@@ -1,24 +1,21 @@
 from models.sentiment_model import SentimentAnalyzer
-from models.topic_model import TopicExtractorTop2Vec
+from models.topic_model import TopicPredictor  # aggiornato
 from models.response_generator import ResponseGenerator
 from utils.text_cleaner import clean_text
 from dotenv import load_dotenv
+import pandas as pd
 
 load_dotenv()
 
-sample_reviews = [
-    "Servizio lento e personale scortese.",
-    "Tutto fantastico, consiglio vivamente!",
-    "Prezzi alti ma qualità buona.",
-    "Esperienza deludente, tornerò solo se migliora.",
-    "Locale accogliente e ben curato.",
-    "La pizza era fredda e gommosa.",
-]
+# === Caricamento dataset ===
+df = pd.read_csv("ready_dataset_for_training.csv", sep=";")
+sample_reviews = df["review_text"].dropna().head(50).tolist()
 
-
+# === Inizializzazione modelli ===
 sentiment_analyzer = SentimentAnalyzer()
-topic_extractor = TopicExtractorTop2Vec()
-response_generator = ResponseGenerator()
+topic_predictor = TopicPredictor(model_path="./review_classifier_multilabel")  # cambiato nome classe
+#response_generator = ResponseGenerator()
+
 cleaned_reviews = []
 
 print("🔍 Analisi recensioni:\n")
@@ -26,18 +23,36 @@ print("🔍 Analisi recensioni:\n")
 for review in sample_reviews:
     cleaned = clean_text(review)
     cleaned_reviews.append(cleaned)
+
     sentiment = sentiment_analyzer.predict(cleaned)
-    risposta = response_generator.generate(review, sentiment)
+    topic_result = topic_predictor.predict(cleaned)  # nuova predizione con TopicPredictor
+    predicted_topics = topic_result["predicted_labels"]
+
+    #risposta = response_generator.generate(review, sentiment, predicted_topics)  # passaggio dei topic
 
     print(f"📝 Recensione: {review}")
     print(f"📊 Sentiment: {sentiment}")
-    print(f"🤖 Risposta: {risposta}\n")
+    print(f"🏷️ Topic: {predicted_topics}")
+    #print(f"🤖 Risposta: {risposta}\n")
 
-# Analisi dei temi globali
-"""print("🧠 Temi ricorrenti:")
-topic_extractor.fit(cleaned_reviews)
-topics, scores, docs = topic_extractor.extract(num_topics=5)
-print("📌 Topics trovati:")
-for i, (keywords, score) in enumerate(zip(topics, scores)):
-    print(f"Topic {i+1}: {keywords} (score: {score})")
-"""
+print("=========================================== \n")
+
+for review in sample_reviews:
+    cleaned = clean_text(review)
+    cleaned_reviews.append(cleaned)
+
+    sentiment = sentiment_analyzer.predict(cleaned)
+
+    if sentiment == "negative":
+        topic_result = topic_predictor.predict(cleaned)
+        predicted_topics = topic_result["predicted_labels"]
+
+        # risposta = response_generator.generate(review, sentiment, predicted_topics)
+
+        print(f"📝 Recensione: {review}")
+        print(f"📊 Sentiment: {sentiment}")
+        print(f"🏷️ Topic: {predicted_topics}")
+        # print(f"🤖 Risposta: {risposta}\n")
+
+
+

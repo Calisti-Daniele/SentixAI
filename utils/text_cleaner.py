@@ -1,7 +1,6 @@
 import re
 
-def clean_text(text: str) -> str:
-    text = text.lower()
-    text = re.sub(r'[^a-zA-Zàèéìòù\\s]', '', text)
-    text = re.sub(r'\\s+', ' ', text).strip()
+def clean_text(text):
+    import re
+    text = re.sub(r"\s+", " ", text).strip()  # Rimuove \n, \t, doppi spazi, ecc.
     return text

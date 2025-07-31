@@ -6,6 +6,8 @@ import numpy as np
 import evaluate
 import torch
 from torch import nn
+import os
+from sklearn.metrics import accuracy_score, f1_score
 
 print("🔥 CUDA disponibile:", torch.cuda.is_available())
 print("🧠 Device in uso:", torch.cuda.get_device_name(0) if torch.cuda.is_available() else "CPU")
@@ -74,17 +76,16 @@ print("📊 Preparazione metriche di valutazione...")
 accuracy = evaluate.load("accuracy")
 f1 = evaluate.load("f1")
 
-def multilabel_accuracy(preds, labels):
-    return (preds == labels).all(axis=1).mean()  # esattezza completa su tutte le classi
 
 def compute_metrics(eval_pred):
     logits, labels = eval_pred
     probs = torch.sigmoid(torch.tensor(logits)).numpy()
     preds = (probs >= 0.5).astype(int)
+
     return {
-        "custom_accuracy": multilabel_accuracy(preds, labels),
-        "f1_micro": f1.compute(predictions=preds, references=labels, average="micro")["f1"],
-        "f1_macro": f1.compute(predictions=preds, references=labels, average="macro")["f1"],
+        "custom_accuracy": (preds == labels).all(axis=1).mean(),  # esattezza completa
+        "f1_micro": f1_score(labels, preds, average="micro"),
+        "f1_macro": f1_score(labels, preds, average="macro")
     }
 
 
@@ -99,14 +100,14 @@ training_args = TrainingArguments(
     num_train_epochs=NUM_EPOCHS,
     eval_strategy="steps",     # <-- cambia da "epoch"
     save_strategy="steps",           # <-- salva ogni N step
-    save_steps=1000,                 # <-- salva ogni 1000 step (modifica a piacere)
-    eval_steps=1000,                 # <-- valuta ogni 1000 step
+    save_steps=10000,                 # <-- salva ogni 1000 step (modifica a piacere)
+    eval_steps=5000,                 # <-- valuta ogni 1000 step
     logging_steps=50,
     logging_dir="./logs",
     load_best_model_at_end=True,
     metric_for_best_model="f1_micro",
     greater_is_better=True,
-    save_total_limit=2,              # <-- massimo 2 checkpoint da salvare
+    save_total_limit=5,              # <-- massimo 2 checkpoint da salvare
     report_to="none",
     fp16=True
 )
@@ -137,9 +138,17 @@ def custom_compute_loss(model, inputs, return_outputs=False, num_items_in_batch=
 trainer.compute_loss = custom_compute_loss
 print("✅ Trainer pronto\n")
 
+last_checkpoint = None
+checkpoints = [d for d in os.listdir(training_args.output_dir) if d.startswith("checkpoint-")]
+if checkpoints:
+    last_checkpoint = os.path.join(training_args.output_dir, sorted(checkpoints, key=lambda x: int(x.split('-')[-1]))[-1])
+    print(f"🧩 Checkpoint trovato: {last_checkpoint} – ripresa dell’addestramento")
+else:
+    print("🆕 Nessun checkpoint trovato – si parte da zero")
+
 # === 11. Addestramento ===
 print("🚦 Inizio addestramento...\n")
-trainer.train(resume_from_checkpoint=True)
+trainer.train(resume_from_checkpoint=last_checkpoint)
 print("\n✅ Addestramento completato!\n")
 
 # === 12. Salvataggio modello ===

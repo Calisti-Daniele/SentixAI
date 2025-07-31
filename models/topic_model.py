@@ -1,22 +1,42 @@
-from top2vec import Top2Vec
+import torch
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import numpy as np
 
-class TopicExtractorTop2Vec:
-    def __init__(self):
-        self.model = None
+class TopicPredictor:
+    def __init__(self, model_path, threshold=0.5):
+        self.model_path = model_path
+        self.threshold = threshold
+        self.categories = [
+            "servizio", "prezzo", "cibo", "attesa", "personale",
+            "ambiente", "pagamento", "quantità", "esperienza", "altro"
+        ]
 
-    def fit(self, texts: list[str]):
-        texts = [t for t in texts if t and len(t.strip()) > 3]
+        # Caricamento modello e tokenizer
+        print("📦 Caricamento modello da:", model_path)
+        self.tokenizer = AutoTokenizer.from_pretrained(model_path)
+        self.model = AutoModelForSequenceClassification.from_pretrained(model_path)
+        self.model.eval()
+        print("✅ Modello caricato con successo.\n")
 
-        if len(texts) < 5:
-            raise ValueError("Il numero di recensioni valide è troppo basso per estrarre i topic.")
-
-        self.model = Top2Vec(
-            documents=texts,
-            embedding_model="universal-sentence-encoder-multilingual",  # ✅ stabile e multilingua
-            speed="deep-learn",  # deep-learn = fallback più robusto
-            workers=4
+    def predict(self, text):
+        inputs = self.tokenizer(
+            text,
+            return_tensors="pt",
+            truncation=True,
+            padding="max_length",
+            max_length=128
         )
 
-    def extract(self, num_topics: int = 5):
-        topics, topic_scores, topic_words = self.model.get_topics(num_topics=num_topics)
-        return topic_words, topic_scores, topics
+        with torch.no_grad():
+            logits = self.model(**inputs).logits
+            probs = torch.sigmoid(logits).squeeze().numpy()
+            preds = (probs >= self.threshold).astype(int)
+
+        results = {self.categories[i]: float(probs[i]) for i in range(len(self.categories))}
+        predicted_labels = [self.categories[i] for i, val in enumerate(preds) if val == 1]
+
+        return {
+            "input": text,
+            "predicted_labels": predicted_labels,
+            "probabilities": results
+        }
